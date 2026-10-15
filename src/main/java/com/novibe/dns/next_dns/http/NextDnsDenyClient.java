@@ -19,7 +19,7 @@ public class NextDnsDenyClient extends AbstractNextDnsApiClient {
     }
 
     public void saveDenys(List<CreateDenyDto> denyDtos) {
-        callApiForEach(denyDtos, this::saveDeny);
+        callApiForEachOrFail(denyDtos, this::saveDeny);
     }
 
     public void deleteDenysByIds(List<String> ids) {

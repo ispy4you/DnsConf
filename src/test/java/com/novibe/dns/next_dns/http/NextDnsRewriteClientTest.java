@@ -2,6 +2,7 @@ package com.novibe.dns.next_dns.http;
 
 import com.google.gson.Gson;
 import com.novibe.common.base_structures.DnsProfile;
+import com.novibe.common.exception.DnsApiException;
 import com.novibe.dns.next_dns.http.dto.request.CreateRewriteDto;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +23,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
@@ -81,13 +83,23 @@ class NextDnsRewriteClientTest {
         doReturn(response(200, "{\"errors\":[{\"code\":\"conflict\"}]}"), response(200, "{}"))
                 .when(httpClient).send(any(), any());
 
-        String log = captureLog(() -> nextDnsRewriteClient.saveRewrites(List.of(
-                new CreateRewriteDto("chatgpt.com", "1.2.3.4"),
-                new CreateRewriteDto("openai.com", "1.2.3.4"))));
+        String log = captureLog(() -> nextDnsRewriteClient.deleteRewritesByIds(List.of("first", "second")));
 
         assertTrue(log.contains("Current success progress: 1/2"));
         assertFalse(log.contains("2/2"));
         assertTrue(log.contains("Completed with 1 requests failed of 2"));
+    }
+
+    @Test
+    void failsOnFirstRefusedRewrite() throws IOException, InterruptedException {
+        doReturn(response(200, "{\"errors\":[{\"code\":\"conflict\"}]}")).when(httpClient).send(any(), any());
+
+        DnsApiException exception = assertThrows(DnsApiException.class, () -> nextDnsRewriteClient.saveRewrites(List.of(
+                new CreateRewriteDto("chatgpt.com", "1.2.3.4"),
+                new CreateRewriteDto("openai.com", "1.2.3.4"))));
+
+        assertTrue(exception.getMessage().startsWith("Failed request after 0 of 2 requests"));
+        verify(httpClient, times(1)).send(any(), any());
     }
 
     private String captureLog(Runnable action) {

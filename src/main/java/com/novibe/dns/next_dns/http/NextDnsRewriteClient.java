@@ -20,7 +20,7 @@ public class NextDnsRewriteClient extends AbstractNextDnsApiClient {
     }
 
     public void saveRewrites(List<CreateRewriteDto> rewriteDtos) {
-        callApiForEach(rewriteDtos, this::saveRewrite);
+        callApiForEachOrFail(rewriteDtos, this::saveRewrite);
     }
 
     public void deleteRewritesByIds(List<String> ids) {

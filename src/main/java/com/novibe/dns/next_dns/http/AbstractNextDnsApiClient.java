@@ -2,6 +2,7 @@ package com.novibe.dns.next_dns.http;
 
 import com.novibe.common.http.ApiRequestSender;
 import com.novibe.common.exception.CredentialsException;
+import com.novibe.common.exception.DnsApiException;
 import com.novibe.common.exception.DnsHttpError;
 import com.novibe.common.util.Log;
 import com.novibe.dns.next_dns.http.dto.response.NextDnsResponse;
@@ -66,12 +67,30 @@ public abstract class AbstractNextDnsApiClient extends ApiRequestSender {
 
     /**
      * Sends a request per element, so the progress of long lists is visible in the log.
+     * A refused element is logged and the rest of the list is still processed.
      */
     protected <D, R extends NextDnsResponse<?>> void callApiForEach(List<D> requestList, Function<D, R> request) {
+        callApiForEach(requestList, request, false);
+    }
+
+    /**
+     * Same as {@link #callApiForEach}, but the first refused element stops the profile:
+     * a half applied configuration must not end up as a successful run.
+     */
+    protected <D, R extends NextDnsResponse<?>> void callApiForEachOrFail(List<D> requestList, Function<D, R> request) {
+        callApiForEach(requestList, request, true);
+    }
+
+    private <D, R extends NextDnsResponse<?>> void callApiForEach(List<D> requestList, Function<D, R> request,
+                                                                  boolean failOnRefusal) {
         int succeeded = 0;
         for (D requestData : requestList) {
             R response = request.apply(requestData);
             if (ofNullable(response).map(NextDnsResponse::getErrors).isPresent()) {
+                if (failOnRefusal) {
+                    throw new DnsApiException("Failed request after %s of %s requests: %s"
+                            .formatted(succeeded, requestList.size(), response.getErrors()));
+                }
                 Log.fail("Failed request: " + response.getErrors());
             } else {
                 Log.progress("Current success progress: " + ++succeeded + "/" + requestList.size());
