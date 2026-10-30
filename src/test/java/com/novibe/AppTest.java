@@ -8,10 +8,12 @@ import org.junit.jupiter.api.Test;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 
@@ -46,15 +48,21 @@ class AppTest {
     }
 
     @Test
-    void survivesSelfReferencingCause() {
-        RuntimeException loop = new RuntimeException("first") {
+    void survivesCausesThatLoopBack() {
+        RuntimeException itsOwnCause = new RuntimeException("itself") {
             @Override
             public synchronized Throwable getCause() {
                 return this;
             }
         };
+        RuntimeException second = new RuntimeException("second");
+        RuntimeException first = new RuntimeException("first", second);
+        second.initCause(first);
 
-        assertNull(App.profileSetupCause(loop));
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
+            assertNull(App.profileSetupCause(itsOwnCause));
+            assertNull(App.profileSetupCause(first));
+        });
     }
 
     private HttpResponse<String> refusedResponse() {

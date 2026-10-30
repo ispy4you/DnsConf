@@ -14,7 +14,10 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
@@ -58,12 +61,10 @@ public class App {
      * Executors and task scopes wrap what a subtask threw, so the profile failure can sit a few levels deep.
      */
     static @Nullable ProfileSetupException profileSetupCause(Throwable thrown) {
-        for (Throwable current = thrown; nonNull(current); current = current.getCause()) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable current = thrown; nonNull(current) && seen.add(current); current = current.getCause()) {
             if (current instanceof ProfileSetupException profileSetupException) {
                 return profileSetupException;
-            }
-            if (current == current.getCause()) {
-                break;
             }
         }
         return null;
