@@ -15,8 +15,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.StructuredTaskScope;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -69,11 +71,12 @@ class RuleServiceTest {
     void failsWhenApiRefusesToCreateOverrideRule() {
         when(cloudflareRuleClient.createBlockingRule(any())).thenReturn(refusedAnswer());
 
-        DnsApiException exception = assertThrows(DnsApiException.class,
+        StructuredTaskScope.FailedException exception = assertThrows(StructuredTaskScope.FailedException.class,
                 () -> ruleService.createNewOverrideRules(Map.of("1.2.3.4", List.of()),
                         RulePrecedenceCounter.providePrecedenceCounter(List.of())));
 
-        assertTrue(exception.getMessage().startsWith("Failed to set override rule for IP 1.2.3.4"));
+        DnsApiException refusal = assertInstanceOf(DnsApiException.class, exception.getCause());
+        assertTrue(refusal.getMessage().startsWith("Failed to set override rule for IP 1.2.3.4"));
     }
 
     @Test

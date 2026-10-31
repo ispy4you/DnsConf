@@ -54,12 +54,6 @@ public class RuleService {
             scope.fork(() -> createNewOverrideRule(list, overrideIp, rulePrecedenceCounter.next()));
         }
             scope.join();
-        } catch (StructuredTaskScope.FailedException failedException) {
-            // subtask failures are wrapped, but App expects a ProfileSetupException
-            if (failedException.getCause() instanceof DnsApiException dnsApiException) {
-                throw dnsApiException;
-            }
-            throw failedException;
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
