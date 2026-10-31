@@ -3,7 +3,6 @@ package com.novibe.common.util;
 import com.novibe.common.base_structures.BypassRoute;
 import com.novibe.common.base_structures.DnsProfile;
 import com.novibe.common.exception.UserInputException;
-import lombok.Cleanup;
 import org.xbill.DNS.ARecord;
 import org.xbill.DNS.Address;
 import org.xbill.DNS.DohResolver;
@@ -20,8 +19,6 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.SequencedSet;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.isNull;
@@ -31,11 +28,10 @@ public class DonorDnsUtils {
     public static void replaceIPs(List<BypassRoute> bypassRoutes, DnsProfile dnsProfile) {
         Resolver dnsResolver = getDnsResolver(dnsProfile);
         dnsResolver.setTimeout(Duration.ofSeconds(5));
-        @Cleanup ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-        for (BypassRoute bypassRoute : bypassRoutes) {
+        ParallelTasks.runAll(bypassRoutes, bypassRoute -> {
             Log.io("Comparing IP for %s with DNS query to %s".formatted(bypassRoute.website(), dnsProfile.donorDns()));
-            executor.submit(() -> replaceIp(bypassRoute, dnsResolver));
-        }
+            replaceIp(bypassRoute, dnsResolver);
+        });
     }
 
     private static void replaceIp(BypassRoute bypassRoute, Resolver dnsResolver) {

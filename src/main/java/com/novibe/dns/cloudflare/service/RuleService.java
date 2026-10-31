@@ -2,6 +2,7 @@ package com.novibe.dns.cloudflare.service;
 
 import com.novibe.common.exception.DnsApiException;
 import com.novibe.common.util.Log;
+import com.novibe.common.util.ParallelTasks;
 import com.novibe.dns.cloudflare.http.CloudflareRuleClient;
 import com.novibe.dns.cloudflare.http.dto.request.CreateRuleRequest;
 import com.novibe.dns.cloudflare.http.dto.response.list.GatewayListDto;
@@ -15,7 +16,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.StructuredTaskScope;
 import java.util.stream.Collectors;
 
 @Service
@@ -45,18 +45,9 @@ public class RuleService {
         }
     }
 
-    @SuppressWarnings("preview")
     public void createNewOverrideRules(Map<String, List<GatewayListDto>> lists, RulePrecedenceCounter rulePrecedenceCounter) {
-        try  (var scope = StructuredTaskScope.open()) {
-        for (Map.Entry<String, List<GatewayListDto>> entry : lists.entrySet()) {
-            String overrideIp = entry.getKey();
-            List<GatewayListDto> list = entry.getValue();
-            scope.fork(() -> createNewOverrideRule(list, overrideIp, rulePrecedenceCounter.next()));
-        }
-            scope.join();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        ParallelTasks.runAll(lists.entrySet(), entry ->
+                createNewOverrideRule(entry.getValue(), entry.getKey(), rulePrecedenceCounter.next()));
     }
 
     private void createNewOverrideRule(List<GatewayListDto> lists, String overrideIp, int precedence) {

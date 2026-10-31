@@ -3,15 +3,14 @@ package com.novibe.dns.cloudflare.service;
 import com.novibe.common.base_structures.BypassRoute;
 import com.novibe.common.exception.DnsApiException;
 import com.novibe.common.service.ExcludeRedirectCheckService;
-import com.novibe.common.util.FunctionWrapper;
 import com.novibe.common.util.Log;
+import com.novibe.common.util.ParallelTasks;
 import com.novibe.dns.cloudflare.http.CloudflareListClient;
 import com.novibe.dns.cloudflare.http.dto.Item;
 import com.novibe.dns.cloudflare.http.dto.request.CreateListRequest;
 import com.novibe.dns.cloudflare.http.dto.response.CloudflareApiMessage;
 import com.novibe.dns.cloudflare.http.dto.response.list.GatewayListDto;
 import com.novibe.dns.cloudflare.http.dto.response.list.SingleListApiResponse;
-import lombok.Cleanup;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,10 +19,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -83,13 +78,15 @@ public class ListService {
         }
         Log.io("Removing " + oldIds.size() + " lists...");
         AtomicInteger counter = new AtomicInteger();
-        @Cleanup ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-        List<List<CloudflareApiMessage>> errors = oldIds.stream()
-                .map(id -> executor.submit(() -> cloudflareListClient.deleteListById(id)))
-                .map(FunctionWrapper.wrap(Future::get))
-                .peek(response -> {
-                    if (response.isSuccess()) Log.progress(counter.incrementAndGet() + "/" + oldIds.size() + " removed");
-                })
+        List<SingleListApiResponse> responses = ParallelTasks.callAll(oldIds, id -> {
+            SingleListApiResponse response = cloudflareListClient.deleteListById(id);
+            if (response.isSuccess()) {
+                Log.progress(counter.incrementAndGet() + "/" + oldIds.size() + " removed");
+            }
+            return response;
+        });
+
+        List<List<CloudflareApiMessage>> errors = responses.stream()
                 .filter(response -> !response.isSuccess())
                 .map(SingleListApiResponse::getErrors)
                 .toList();
@@ -102,31 +99,24 @@ public class ListService {
     }
 
     private List<GatewayListDto> saveNewLists(List<CreateListRequest> createListRequests) {
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<SingleListApiResponse>> futures = createListRequests.stream()
-                    .map(list -> executor.submit(() -> cloudflareListClient.postList(list)))
-                    .toList();
+        AtomicInteger counter = new AtomicInteger();
+        List<SingleListApiResponse> responses = ParallelTasks.callAll(createListRequests, request -> {
+            SingleListApiResponse response = cloudflareListClient.postList(request);
+            if (response.isSuccess()) {
+                Log.progress(counter.incrementAndGet() + "/" + createListRequests.size() + " saved");
+            }
+            return response;
+        });
 
-            List<List<CloudflareApiMessage>> errors = new ArrayList<>();
-            List<GatewayListDto> result = new ArrayList<>();
-            int counter = 0;
-            for (Future<SingleListApiResponse> res : futures) {
-                SingleListApiResponse response = res.get();
-                if (response.isSuccess()) {
-                    Log.progress(++counter + "/" + createListRequests.size() + " saved");
-                    result.add(response.getResult());
-                } else {
-                    errors.add(response.getErrors());
-                }
-            }
-            if (!errors.isEmpty()) {
-                throw new DnsApiException("Failed to save new lists (%s of %s): %s"
-                        .formatted(errors.size(), createListRequests.size(), errors));
-            }
-            return result;
-        } catch (ExecutionException | InterruptedException e) {
-            throw new RuntimeException(e);
+        List<List<CloudflareApiMessage>> errors = responses.stream()
+                .filter(response -> !response.isSuccess())
+                .map(SingleListApiResponse::getErrors)
+                .toList();
+        if (!errors.isEmpty()) {
+            throw new DnsApiException("Failed to save new lists (%s of %s): %s"
+                    .formatted(errors.size(), createListRequests.size(), errors));
         }
+        return responses.stream().map(SingleListApiResponse::getResult).toList();
     }
 
     Map<String, List<CreateListRequest>> formOverrideListRequestsByIp(List<BypassRoute> routes) {
