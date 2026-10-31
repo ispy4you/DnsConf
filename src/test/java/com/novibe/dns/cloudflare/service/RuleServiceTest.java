@@ -1,6 +1,6 @@
 package com.novibe.dns.cloudflare.service;
 
-import com.novibe.common.exception.DnsApiException;
+import com.novibe.common.exception.ProfileSetupException;
 import com.novibe.dns.cloudflare.http.CloudflareRuleClient;
 import com.novibe.dns.cloudflare.http.dto.response.CloudflareApiMessage;
 import com.novibe.dns.cloudflare.http.dto.response.rule.GatewayRuleDto;
@@ -61,7 +61,7 @@ class RuleServiceTest {
     void failsWhenApiRefusesToCreateBlockingRule() {
         when(cloudflareRuleClient.createBlockingRule(any())).thenReturn(refusedAnswer());
 
-        DnsApiException exception = assertThrows(DnsApiException.class,
+        ProfileSetupException exception = assertThrows(ProfileSetupException.class,
                 () -> ruleService.createNewBlockingRule(List.of(), RulePrecedenceCounter.providePrecedenceCounter(List.of())));
 
         assertTrue(exception.getMessage().startsWith("Failed to set blocking rule"));
@@ -75,7 +75,7 @@ class RuleServiceTest {
                 () -> ruleService.createNewOverrideRules(Map.of("1.2.3.4", List.of()),
                         RulePrecedenceCounter.providePrecedenceCounter(List.of())));
 
-        DnsApiException refusal = assertInstanceOf(DnsApiException.class, exception.getCause());
+        ProfileSetupException refusal = assertInstanceOf(ProfileSetupException.class, exception.getCause());
         assertTrue(refusal.getMessage().startsWith("Failed to set override rule for IP 1.2.3.4"));
     }
 
